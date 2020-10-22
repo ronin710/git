@@ -1,0 +1,83 @@
+import re
+import os
+import csv
+import time
+import datetime
+import subprocess
+import numpy as np
+
+def main():
+
+    init = initialize()
+
+    while(1):
+
+        info = get_info()
+
+        if(info[0] != info[1]): # 現在の年月日と直前に取得した年月日が異なる場合(日を跨いだ場合)
+            # 年月日の更新
+            with open("date.txt", "w") as f:
+                f.write(info[1])
+            # listの初期化
+            init[0].clear()
+            init[1].clear()
+
+        add_data(info) # logの取得
+
+      
+
+#--logファイルの生成 & グラフの設定--#
+def initialize():
+
+    if not os.path.exists("date.txt"):
+        subprocess.run( ["touch", "date.txt"] ) 
+    if not os.path.exists("log"):
+        subprocess.run( ["mkdir", "log"] )
+
+   
+    x, y, x_scale, x_scale_encode = [], [], [], []
+
+    for i in range (25):
+        x_scale.append(i * 60) # 0*60[m] ~ 24*60[m]
+        x_scale_encode.append(str(i) + ":00") # 0:00 ~ 24:00
+
+    return x, y, x_scale, x_scale_encode
+
+#--現在の年月日、時刻、cpu温度を取得--#
+def get_info():
+
+    # 以前書き込みを行った年月日を取得
+    with open("date.txt", "r") as f:
+        date_old = f.read() 
+
+    # 現在の年月日を取得
+    date_now = str(datetime.date.today())
+
+    # 現在の時刻の取得
+    proc = subprocess.run(["date", "+%H.%M"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    proc_time = re.split("[\n]", (proc.stdout.decode("utf8")))
+    if(proc_time[0][0:1] == "0"): # 0~9時代の時
+        proc_time[0] = proc_time[0][1:5] # 先頭の'0'を削除
+    proc_time_encode = (int(proc_time[0].split(".")[0]) * 60) + (int(proc_time[0].split(".")[1])) # 0:00から経過した分数に変換
+
+    # 現在のcpu温度の取得
+    proc = subprocess.run(["vcgencmd", "measure_temp"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    proc_tmp = re.split("[=\']", proc.stdout.decode("utf8"))
+  
+   # 現在のcpu周波数の取得
+    proc = subprocess.run(["vcgencmd", "measure_clock arm"], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    proc_clock = re.split("[=\']", proc.stdout.decode("utf8"))
+    
+    return date_old, date_now, proc_time[0], str(proc_time_encode), proc_tmp[1], proc_clock[1] 
+#--データの追記--#
+def add_data(info):
+
+    with open("log/" + info[1] + ".csv", "a") as f:
+        writer = csv.writer(f)
+        if(info[0] != info[1]):
+            writer.writerow( ["time", "cpu_temperature [℃]", "cpu_clock [Hz]"] )
+        writer.writerow( [info[2].replace(".", ":"), info[4]] )
+
+
+if __name__ == "__main__":
+    main()
